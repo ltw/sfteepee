@@ -1,8 +1,7 @@
 (ns sfteepee
-  (:use [clojure.contrib.def :only [defvar]])
   (:import [com.jcraft.jsch JSch]))
 
-(defvar *channel*)
+(def ^{:dynamic true} *channel*)
 
 (defmacro with-connection [user password host port & body]
   `(let [session# (doto (.getSession (JSch.) ~user ~host ~port)
