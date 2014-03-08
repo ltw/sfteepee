@@ -1,20 +1,32 @@
 (ns sfteepee
-  (:import [com.jcraft.jsch JSch]))
+  (:import [com.jcraft.jsch JSch])
+  (:require [clojure.java.io :as io]))
 
 (def ^{:dynamic true} *channel*)
+(def ^{:dynamic true} *session*)
 
-(defmacro with-connection [user password host port & body]
-  `(let [session# (doto (.getSession (JSch.) ~user ~host ~port)
-                    (.setConfig "StrictHostKeyChecking" "no")
-                    (.setPassword ~password)
-                    (.connect))]
-     (binding [*channel* (doto (.openChannel session# "sftp")
-                           (.connect))]
-       (try
-         ~@body
-         (finally
-          (.disconnect *channel*)
-          (.disconnect session#))))))
+(defmacro with-connection [server & body]
+  `(with-connection-fn ~server (fn [] ~@body)))
+
+(defn with-connection-fn
+  "Execute a function in the context of an SFTP connection."
+  [{:keys [user password host port pubkey-path]} connection-fn]
+  (let [jsch    (if pubkey-path
+                  (doto (JSch.) (.addIdentity (.getAbsolutePath (io/file pubkey-path))))
+                  (JSch.))
+        session (doto (.getSession jsch user host port)
+                  (.setConfig "StrictHostKeyChecking" "no")
+                  (cond-> password (.setPassword password))
+                  (.connect))
+        channel (doto (.openChannel session "sftp")
+                  (.connect))]
+    (binding [*session* session
+              *channel* channel]
+      (try
+        (connection-fn)
+        (finally
+          (.disconnect channel)
+          (.disconnect session))))))
 
 (defn pwd []
   (.pwd *channel*))
